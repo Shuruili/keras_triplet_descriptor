@@ -11,6 +11,9 @@ import keras
 from tqdm import tqdm
 import glob
 import random
+import cv2
+from keras.preprocessing.image import ImageDataGenerator
+
 
 splits = ['a', 'b', 'c', 'view', 'illum']
 tps = ['ref','e1','e2','e3','e4','e5','h1','h2','h3','h4','h5',\
@@ -158,6 +161,50 @@ class HPatches():
         patches[i*batch_size:] = batch
         return patches
 
+    
+    def random_brightness(self, image):
+
+        # Generate new random brightness
+
+        rand = random.uniform(0.3, 1.0)
+
+        image = rand*image
+        return image
+
+
+    # Zoom-in
+
+    def zoom(self, image):
+        IMAGE_HEIGHT = 32
+        IMAGE_WIDTH = 32
+        zoom_pix = random.randint(0, 10)
+
+        zoom_factor = 1 + (2*zoom_pix)/IMAGE_HEIGHT
+
+
+        image = cv2.resize(image, None, fx=zoom_factor,
+
+                           fy=zoom_factor, interpolation=cv2.INTER_LINEAR)
+
+        top_crop = (image.shape[0] - IMAGE_HEIGHT)//2
+
+        left_crop = (image.shape[1] - IMAGE_WIDTH)//2
+
+        image = image[top_crop: top_crop+IMAGE_HEIGHT,
+
+                      left_crop: left_crop+IMAGE_WIDTH]
+
+        return image
+
+    def data_augg(self, img):
+        img1 = self.random_brightness(img)
+        img2 = self.zoom(img)
+        augmented = [img,img1,img2]
+        return augmented
+
+
+
+
     def read_image_file(self, data_dir, train = 1):
         """Return a Tensor containing the patches
         """
@@ -171,6 +218,7 @@ class HPatches():
         patches = []
         labels = []
         counter = 0
+        n_aug = 3
         hpatches_sequences = [x[1] for x in os.walk(data_dir)][0]
         if train:
             list_dirs = self.train_fnames
@@ -191,11 +239,21 @@ class HPatches():
                     patch = image[i * (w): (i + 1) * (w), 0:w]
                     patch = cv2.resize(patch, (32, 32))
                     patch = np.array(patch, dtype=np.uint8)
+                    #print(patch)
+                    #add data augmentation here
+                    '''
+                    patchaug = self.data_augg(patch)
+                    for j in range(n_aug):
+                        patches.append(patchaug[j])
+                        labels.append(i+j+counter)
+                    del patchaug
+                    '''
                     patches.append(patch)
                     labels.append(i + counter)
-            counter += n_patches
-
-        patches = np.array(patches, dtype=np.uint8)
+            counter += n_patches*n_aug
+        patches = np.array(patches, dtype=np.uint8)#this funcation double the memory useage, maybe use nparray.append instead? but for trainging it's still not enough memory
+        print(len(patches))
+        
         if self.denoise_model and not self.use_clean:
             print('Denoising patches...')
             patches = self.denoise_patches(patches)
